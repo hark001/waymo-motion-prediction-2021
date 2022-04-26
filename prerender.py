@@ -8,6 +8,8 @@ import numpy as np
 import tensorflow as tf
 from tqdm import tqdm
 
+# np.set_printoptions(threshold=np.inf)
+
 # allow memory growth on GPU
 physical_devices = tf.config.list_physical_devices('GPU')
 tf.config.experimental.set_memory_growth(physical_devices[0], enable=True)
@@ -222,6 +224,12 @@ def rasterize(
         past_y,
         current_x,
         current_y,
+        past_vel_x,
+        past_vel_y,
+        current_vel_x,
+        current_vel_y,
+        future_vel_x,
+        future_vel_y,
         current_yaw,
         past_yaw,
         past_valid,
@@ -273,11 +281,28 @@ def rasterize(
         ),
         axis=-1,
     )
-
+    # print("past_vel_x: ",len(past_vel_x))
+    # print("past_vel_y: ",len(past_vel_y))
+    # print("current_vel_x: ",len(current_vel_x))
+    # print("current_vel_y: ",len(current_vel_y))
+    vel_XY = np.concatenate(
+        (
+            np.expand_dims(np.concatenate((past_vel_x, current_vel_x), axis=1), axis=-1),
+            np.expand_dims(np.concatenate((past_vel_y, current_vel_y), axis=1), axis=-1),
+        ),
+        axis=-1,
+    )
+    # print("vel_XY: ",len(vel_XY[0]))
     GT_XY = np.concatenate(
         (np.expand_dims(future_x, axis=-1), np.expand_dims(future_y, axis=-1)), axis=-1
     )
-
+    # print("future_vel_x: ",len(future_vel_x))
+    # print("future_vel_y: ",len(future_vel_y))
+    GT_vel_XY = np.concatenate(
+        (np.expand_dims(future_vel_x, axis=-1), np.expand_dims(future_vel_y, axis=-1)), axis=-1
+    )
+    # print("GT_vel_XY: ",GT_vel_XY)
+    # print("tracks_to_predict: ",tracks_to_predict)
     YAWS = np.concatenate((past_yaw, current_yaw), axis=1)
 
     agents_valid = np.concatenate((past_valid, current_valid), axis=1)
@@ -303,6 +328,8 @@ def rasterize(
             gt_xy,
             future_val,
             predict,
+            vel_xy,
+            gt_vel_xy
     ) in enumerate(
         zip(
             XY,
@@ -314,6 +341,8 @@ def rasterize(
             GT_XY,
             future_valid,
             tracks_to_predict.flatten(),
+            vel_XY,
+            GT_vel_XY
         )
     ):
         if (not validate and future_val.sum() == 0) or (validate and predict == 0):
@@ -478,6 +507,8 @@ def rasterize(
             "future_val_joint": future_valid[tracks_to_predict.flatten() > 0],
             "scenario_id": scenario_id,
             "self_type": self_type,
+            "gt_vel_xy": gt_vel_xy,
+            "vel_xy": vel_xy
         }
 
         GRES.append(raster_dict)
@@ -556,7 +587,6 @@ def vectorize(
         ),
         axis=-1,
     )
-
     Roadline_valid = Roadline_valid.flatten()
     RoadXY = Roadline_xy[:, :2][Roadline_valid > 0]
     Roadline_type = Roadline_type[Roadline_valid > 0].flatten()
@@ -739,6 +769,12 @@ def merge(
         parsed["state/past/y"].numpy(),
         parsed["state/current/x"].numpy(),
         parsed["state/current/y"].numpy(),
+        parsed["state/past/velocity_x"].numpy(),
+        parsed["state/past/velocity_y"].numpy(),
+        parsed["state/current/velocity_x"].numpy(),
+        parsed["state/current/velocity_y"].numpy(),
+        parsed["state/future/velocity_x"].numpy(),
+        parsed["state/future/velocity_y"].numpy(),
         parsed["state/current/bbox_yaw"].numpy(),
         parsed["state/past/bbox_yaw"].numpy(),
         parsed["state/past/valid"].numpy(),
